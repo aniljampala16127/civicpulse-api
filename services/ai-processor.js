@@ -157,6 +157,51 @@ async function processQueue() {
       const classification = await classifyPhoto(photoUrl);
 
       if (classification) {
+        // Reject non-civic photos (low confidence or not applicable)
+        if (classification.confidence < 0.3 || classification.issue_type === 'not_applicable') {
+          await supabase
+            .from('reports')
+            .update({
+              issue_type: 'rejected',
+              ai_type: classification.issue_type,
+              ai_confidence: classification.confidence,
+              ai_severity: 'spam',
+              description: classification.description,
+              status: 'resolved',
+            })
+            .eq('id', report.id);
+
+          console.log(`AI: Rejected report ${report.report_number} - not a civic issue (${(classification.confidence * 100).toFixed(0)}%)`);
+
+          // Notify user via WhatsApp
+          if (report.user_id) {
+            try {
+              const { data: user } = await supabase
+                .from('users')
+                .select('phone')
+                .eq('id', report.user_id)
+                .single();
+
+              if (user?.phone) {
+                const twilio = require('twilio')(
+                  process.env.TWILIO_ACCOUNT_SID,
+                  process.env.TWILIO_AUTH_TOKEN
+                );
+                await twilio.messages.create({
+                  from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+                  to: `whatsapp:${user.phone}`,
+                  body: `❌ Report CP-${String(report.report_number).padStart(5, '0')} was not a civic issue.\n\n` +
+                    `AI detected: ${classification.description}\n\n` +
+                    `Please send photos of:\n• Potholes, garbage, broken roads\n• Traffic violations\n• Stray dogs\n• Water/drainage issues\n\nధన్యవాదాలు! 🙏`
+                });
+              }
+            } catch (notifyErr) {
+              console.error('Notification error:', notifyErr.message);
+            }
+          }
+          continue;
+        }
+
         const updateData = {
           category: classification.category,
           issue_type: classification.issue_type,
