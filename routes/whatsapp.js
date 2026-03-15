@@ -57,6 +57,61 @@ async function createReport(session, phone) {
       userId = newUser?.id;
     }
 
+    // Download photo from Twilio and upload to Supabase Storage
+    let publicPhotoUrl = session.photoUrl;
+    try {
+      if (session.photoUrl && session.photoUrl.includes('api.twilio.com')) {
+        const credentials = Buffer.from(
+          `${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`
+        ).toString('base64');
+
+        const imgResponse = await fetch(session.photoUrl, {
+          headers: { 'Authorization': `Basic ${credentials}` },
+        });
+
+        if (imgResponse.ok) {
+          const buffer = await imgResponse.arrayBuffer();
+          const fileName = `reports/${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
+
+          const { data: upload, error: uploadErr } = await supabase.storage
+            .from('photos')
+            .upload(fileName, Buffer.from(buffer), {
+              contentType: imgResponse.headers.get('content-type') || 'image/jpeg',
+              upsert: false,
+            });
+
+          if (!uploadErr && upload) {
+            const { data: urlData } = supabase.storage
+              .from('photos')
+              .getPublicUrl(fileName);
+            publicPhotoUrl = urlData.publicUrl;
+            console.log('Photo uploaded to Supabase Storage:', publicPhotoUrl);
+          }
+        }
+      }
+    } catch (photoErr) {
+      console.error('Photo upload error:', photoErr.message);
+      // Keep original Twilio URL as fallback
+    }
+
+    // Reverse geocode to get ward/address
+    let ward = null;
+    let address = null;
+    try {
+      const geoUrl = `https://nominatim.openstreetmap.org/reverse?lat=${session.latitude}&lon=${session.longitude}&format=json&zoom=16`;
+      const geoRes = await fetch(geoUrl, {
+        headers: { 'User-Agent': 'CivicPulse/1.0' },
+      });
+      const geoData = await geoRes.json();
+
+      if (geoData.address) {
+        ward = geoData.address.suburb || geoData.address.neighbourhood || geoData.address.city_district || null;
+        address = geoData.display_name ? geoData.display_name.split(',').slice(0, 3).join(',').trim() : null;
+      }
+    } catch (geoErr) {
+      console.error('Geocoding error:', geoErr.message);
+    }
+
     // Create report
     const { data: report, error } = await supabase
       .from('reports')
@@ -68,7 +123,9 @@ async function createReport(session, phone) {
         longitude: session.longitude,
         location: `POINT(${session.longitude} ${session.latitude})`,
         city: 'vijayawada',
-        photo_urls: session.photoUrl ? [session.photoUrl] : [],
+        ward: ward,
+        address: address,
+        photo_urls: publicPhotoUrl ? [publicPhotoUrl] : [],
         status: 'open',
       })
       .select()

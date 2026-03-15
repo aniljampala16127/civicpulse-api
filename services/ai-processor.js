@@ -19,8 +19,20 @@ async function classifyPhoto(imageUrl) {
   }
 
   try {
-    // Fetch image and convert to base64
-    const response = await fetch(imageUrl);
+    // Fetch image - use Twilio auth if it's a Twilio URL
+    const headers = {};
+    if (imageUrl.includes('api.twilio.com')) {
+      const credentials = Buffer.from(
+        `${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`
+      ).toString('base64');
+      headers['Authorization'] = `Basic ${credentials}`;
+    }
+
+    const response = await fetch(imageUrl, { headers });
+    if (!response.ok) {
+      console.error(`AI: Failed to fetch image: ${response.status}`);
+      return null;
+    }
     const buffer = await response.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
     const mediaType = response.headers.get('content-type') || 'image/jpeg';
