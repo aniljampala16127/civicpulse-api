@@ -228,6 +228,60 @@ async function processQueue() {
           .eq('id', report.id);
 
         console.log(`AI: Classified report ${report.report_number} as ${classification.category}/${classification.issue_type} (${(classification.confidence * 100).toFixed(0)}%)`);
+
+        // Award +10 verification points and notify user
+        if (report.user_id && classification.confidence >= 0.3) {
+          try {
+            const { data: user } = await supabase
+              .from('users')
+              .select('phone, total_points')
+              .eq('id', report.user_id)
+              .single();
+
+            if (user) {
+              // Add 10 verification points
+              await supabase
+                .from('users')
+                .update({ total_points: (user.total_points || 0) + 10 })
+                .eq('id', report.user_id);
+
+              // Send classification result via WhatsApp
+              if (user.phone) {
+                const catEmoji = { civic: '🕳️', traffic: '🚦', dog: '🐕', water: '💧', sanitation: '🗑️' };
+                const emoji = catEmoji[classification.category] || '📋';
+                const num = String(report.report_number).padStart(5, '0');
+                const isTraffic = classification.category === 'traffic';
+
+                let msg = `${emoji} AI Verified — CP-${num}\n\n` +
+                  `Type: ${classification.description}\n` +
+                  `Confidence: ${(classification.confidence * 100).toFixed(0)}%\n` +
+                  `Severity: ${classification.severity?.toUpperCase()}\n\n` +
+                  `💰 +10 pts — AI verified ✓\n` +
+                  `Total: ${(user.total_points || 0) + 10} pts\n`;
+
+                if (isTraffic && updateData.vehicle_plate) {
+                  msg += `\n🚗 Plate: ${updateData.vehicle_plate}\n` +
+                    `📋 Sent to Traffic Police for challan\n` +
+                    `💵 You earn 2% of fine when confirmed!\n`;
+                }
+
+                msg += `\n🌐 View: civicpulse-kappa.vercel.app\nధన్యవాదాలు! 🙏`;
+
+                const twilio = require('twilio')(
+                  process.env.TWILIO_ACCOUNT_SID,
+                  process.env.TWILIO_AUTH_TOKEN
+                );
+                await twilio.messages.create({
+                  from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+                  to: `whatsapp:${user.phone}`,
+                  body: msg,
+                });
+              }
+            }
+          } catch (notifyErr) {
+            console.error('Verification notification error:', notifyErr.message);
+          }
+        }
       }
     }
   } catch (err) {

@@ -188,11 +188,14 @@ router.post('/webhook', async (req, res) => {
           const num = String(report.report_number).padStart(5, '0');
           const locationName = report.ward || report.address?.split(',')[0] || 'Location received';
           await sendReply(from,
-            `🎯 Report Submitted!\n\n` +
-            `📋 Report: CP-${num}\n` +
+            `🎯 Report CP-${num} Submitted!\n\n` +
             `📍 ${locationName}\n` +
             `🤖 AI is analyzing your photo...\n\n` +
-            `+5 points earned!\n` +
+            `💰 Rewards Earned:\n` +
+            `  +5 pts — Report submitted\n` +
+            `  +10 pts — If AI verifies ✓\n` +
+            `  +20 pts — When resolved ✓\n\n` +
+            `📊 Type "status" to check your total\n` +
             `ధన్యవాదాలు! 🌟`
           );
         }
@@ -225,11 +228,14 @@ router.post('/webhook', async (req, res) => {
           const num = String(report.report_number).padStart(5, '0');
           const locationName = report.ward || report.address?.split(',')[0] || 'Location received';
           await sendReply(from,
-            `🎯 Report Submitted!\n\n` +
-            `📋 Report: CP-${num}\n` +
+            `🎯 Report CP-${num} Submitted!\n\n` +
             `📍 ${locationName}\n` +
             `🤖 AI is analyzing your photo...\n\n` +
-            `+5 points earned!\n` +
+            `💰 Rewards Earned:\n` +
+            `  +5 pts — Report submitted\n` +
+            `  +10 pts — If AI verifies ✓\n` +
+            `  +20 pts — When resolved ✓\n\n` +
+            `📊 Type "status" to check your total\n` +
             `ధన్యవాదాలు! 🌟`
           );
         }
@@ -258,11 +264,22 @@ router.post('/webhook', async (req, res) => {
         .single();
 
       if (user) {
+        const pts = user.total_points || 0;
+        const tier = pts >= 500 ? '💎 Diamond' : pts >= 300 ? '🥇 Gold' : pts >= 100 ? '🥈 Silver' : '🥉 Bronze';
+        const nextTier = pts >= 500 ? 'MAX' : pts >= 300 ? `${500 - pts} pts to 💎 Diamond` : pts >= 100 ? `${300 - pts} pts to 🥇 Gold` : `${100 - pts} pts to 🥈 Silver`;
+
         await sendReply(from,
           `📊 Your CivicPulse Stats:\n\n` +
           `📝 Reports: ${user.report_count}\n` +
-          `⭐ Points: ${user.total_points}\n` +
-          `💰 Rewards: ₹${user.total_rewards || 0}\n\n` +
+          `⭐ Points: ${pts}\n` +
+          `🏆 Tier: ${tier}\n` +
+          `💰 Rewards Earned: ₹${user.total_rewards || 0}\n\n` +
+          `📈 Next: ${nextTier}\n\n` +
+          `Points Guide:\n` +
+          `  +5 — Submit report\n` +
+          `  +10 — AI verified\n` +
+          `  +20 — Issue resolved\n` +
+          `  +15 — Traffic challan confirmed\n\n` +
           `Keep reporting! 💪`
         );
       } else {
