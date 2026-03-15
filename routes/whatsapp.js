@@ -94,9 +94,10 @@ async function createReport(session, phone) {
       // Keep original Twilio URL as fallback
     }
 
-    // Reverse geocode to get ward/address
+    // Reverse geocode to get ward/address/city
     let ward = null;
     let address = null;
+    let city = 'unknown';
     try {
       const geoUrl = `https://nominatim.openstreetmap.org/reverse?lat=${session.latitude}&lon=${session.longitude}&format=json&zoom=16`;
       const geoRes = await fetch(geoUrl, {
@@ -107,6 +108,7 @@ async function createReport(session, phone) {
       if (geoData.address) {
         ward = geoData.address.suburb || geoData.address.neighbourhood || geoData.address.city_district || null;
         address = geoData.display_name ? geoData.display_name.split(',').slice(0, 3).join(',').trim() : null;
+        city = (geoData.address.city || geoData.address.town || geoData.address.county || 'unknown').toLowerCase();
       }
     } catch (geoErr) {
       console.error('Geocoding error:', geoErr.message);
@@ -122,7 +124,7 @@ async function createReport(session, phone) {
         latitude: session.latitude,
         longitude: session.longitude,
         location: `POINT(${session.longitude} ${session.latitude})`,
-        city: 'vijayawada',
+        city: city,
         ward: ward,
         address: address,
         photo_urls: publicPhotoUrl ? [publicPhotoUrl] : [],
@@ -184,10 +186,11 @@ router.post('/webhook', async (req, res) => {
 
         if (report) {
           const num = String(report.report_number).padStart(5, '0');
+          const locationName = report.ward || report.address?.split(',')[0] || 'Location received';
           await sendReply(from,
             `🎯 Report Submitted!\n\n` +
             `📋 Report: CP-${num}\n` +
-            `📍 Vijayawada\n` +
+            `📍 ${locationName}\n` +
             `🤖 AI is analyzing your photo...\n\n` +
             `+5 points earned!\n` +
             `ధన్యవాదాలు! 🌟`
@@ -220,10 +223,11 @@ router.post('/webhook', async (req, res) => {
 
         if (report) {
           const num = String(report.report_number).padStart(5, '0');
+          const locationName = report.ward || report.address?.split(',')[0] || 'Location received';
           await sendReply(from,
             `🎯 Report Submitted!\n\n` +
             `📋 Report: CP-${num}\n` +
-            `📍 Vijayawada\n` +
+            `📍 ${locationName}\n` +
             `🤖 AI is analyzing your photo...\n\n` +
             `+5 points earned!\n` +
             `ధన్యవాదాలు! 🌟`
